@@ -55,6 +55,7 @@ libmodelsmodule_la_SOURCES= \
 		music_event_in_proxy.h music_event_in_proxy.cpp\
 		music_event_out_proxy.h music_event_out_proxy.cpp\
 		music_message_in_proxy.h music_message_in_proxy.cpp\
+		music_message_out_proxy.h music_message_out_proxy.cpp\
 		noise_generator.h noise_generator.cpp\
 		parrot_neuron.h parrot_neuron.cpp\
 		poisson_generator.h poisson_generator.cpp\

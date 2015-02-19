@@ -823,6 +823,34 @@ namespace nest {
   };
   
  
+   /**
+   * Exception to be thrown if the user tries to perform an operation only allowed during MUSIC runtime.
+   * @ingroup KernelExceptions
+   */
+  class MUSICOnlyRuntime : public KernelException
+  {
+  public:
+    /**
+    * @note model should be passed from get_name() to ensure that
+    *             names of copied models are reported correctly. 
+     * @param model     name of model causing problem
+     * @param action    name of action causing problem
+     */
+  MUSICOnlyRuntime(const std::string& model, const std::string& action)
+    : KernelException("MUSICOnlyRuntime"),
+      model_(model),
+      action_(action)
+      {}
+    ~MUSICOnlyRuntime() throw() {}
+    
+    std::string message();
+
+    private:
+      const std::string model_;
+      const std::string action_;
+  };
+  
+ 
   /**
    * Exception to be thrown if the user tries to map a channel that exceeds the width of the MUSIC port.
    * @ingroup KernelExceptions

@@ -1,5 +1,5 @@
 /*
- *  music_message_in_proxy.h
+ *  music_message_out_proxy.h
  *
  *  This file is part of NEST.
  *
@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef MUSIC_MESSAGE_IN_PROXY_H
-#define MUSIC_MESSAGE_IN_PROXY_H
+#ifndef MUSIC_MESSAGE_OUT_PROXY_H
+#define MUSIC_MESSAGE_OUT_PROXY_H
 
 #include "config.h"
 #ifdef HAVE_MUSIC
@@ -33,28 +33,30 @@
 #include "communicator.h"
 #include "arraydatum.h"
 #include "dictutils.h"
+#include "stringdatum.h"
+#include "compose.hpp"
 
 #include "mpi.h"
 #include "music.hh"
 
 /*BeginDocumentation
 
-Name: music_message_in_proxy - A device which receives message strings from MUSIC.
+Name: music_message_out_proxy - A device which receives message strings from MUSIC.
 
 Description:
-A music_message_in_proxy can be used to receive message strings from
+A music_message_out_proxy can be used to receive message strings from
 remote MUSIC applications in NEST.
 
 It uses the MUSIC library to receive message strings from other
-applications. The music_message_in_proxy represents an input port to
-which MUSIC can connect a message source. The music_message_in_proxy
+applications. The music_message_out_proxy represents an input port to
+which MUSIC can connect a message source. The music_message_out_proxy
 can queried using GetStatus to retrieve the messages.
       	 
 Parameters:
 The following properties are available in the status dictionary:
 
 port_name      - The name of the MUSIC input port to listen to (default:
-                 message_in)
+                 message_out)
 port_width     - The width of the MUSIC input port
 data           - A sub-dictionary that contains the string messages
                  in the form of two arrays:
@@ -68,7 +70,7 @@ The parameter port_name can be set using SetStatus. The field n_messages
 can be set to 0 to clear the data arrays.
 
 Examples:
-/music_message_in_proxy Create /mmip Set
+/music_message_out_proxy Create /mmip Set
 10 Simulate
 mmip GetStatus /data get /messages get 0 get /command Set
 (Executing command ') command join ('.) join =
@@ -83,45 +85,17 @@ SeeAlso: music_event_out_proxy, music_event_in_proxy, music_cont_in_proxy
 
 namespace nest
 {
-  class MsgHandler : public MUSIC::MessageHandler
-  {
-    ArrayDatum messages;                //!< The buffer for incoming message
-    std::vector<double> message_times;  //!< The buffer for incoming message
-      
-    void operator()(double t, void* msg, size_t size)
-    {
-      message_times.push_back(t * 1000.0);
-      messages.push_back(std::string(static_cast<char*>(msg), size));
-    }
-
-    public:
-      void get_status(DictionaryDatum &d) const
-      {
-        DictionaryDatum dict(new Dictionary);
-        (*dict)["messages"]      = messages;
-        (*dict)["message_times"] = DoubleVectorDatum(new std::vector<double>(message_times));
-        (*d)["n_messages"] = messages.size();
-        (*d)["data"] = dict;
-      }
-
-      void clear()
-      {
-        message_times.clear();
-        messages.clear();
-      }
-  };
-
   /**
    * Emit spikes at times received from another application via a
    * MUSIC port. The timestamps of the events also contain offsets,
    * which makes it also useful for precise spikes.
    */
-  class music_message_in_proxy : public Node
+  class music_message_out_proxy : public Node
   {
     
   public:      
-    music_message_in_proxy();
-    music_message_in_proxy(const music_message_in_proxy&);
+    music_message_out_proxy();
+    music_message_out_proxy(const music_message_out_proxy&);
 
     bool has_proxies() const {return false;}
     bool one_node_per_process() const {return true;}
@@ -142,7 +116,7 @@ namespace nest
     
     struct Parameters_ {
       std::string port_name_; //!< the name of MUSIC port to connect to
-      double acceptable_latency_;  //!< the acceptable latency of the port
+
       int max_buffered_;      //!< maximal number ticks to buffer data
 
       Parameters_();  //!< Sets default parameter values
@@ -151,7 +125,7 @@ namespace nest
       void get(DictionaryDatum&) const;
       
       /**
-       * Set values from dicitonary.
+       * Set values from dictionary.
        */
       void set(const DictionaryDatum&, State_&);  
     };
@@ -160,7 +134,6 @@ namespace nest
     
     struct State_ {
       bool published_;  //!< indicates whether this node has been published already with MUSIC
-      int  port_width_; //!< the width of the MUSIC port
 
       State_();  //!< Sets default state value
 
@@ -171,13 +144,12 @@ namespace nest
     // ------------------------------------------------------------
 
     struct Buffers_ {
-      MsgHandler message_handler_;
     };
     
     // ------------------------------------------------------------ 
 
     struct Variables_ {
-      MUSIC::MessageInputPort *MP_; //!< The MUSIC cont port for input of data
+      MUSIC::MessageOutputPort *MP_; //!< The MUSIC cont port for input of data
     };
     
     // ------------------------------------------------------------
@@ -189,16 +161,14 @@ namespace nest
   };
 
 inline
-void music_message_in_proxy::get_status(DictionaryDatum &d) const
+void music_message_out_proxy::get_status(DictionaryDatum &d) const
 {
   P_.get(d);
   S_.get(d);
-
-  B_.message_handler_.get_status(d);
 }
 
 inline
-void music_message_in_proxy::set_status(const DictionaryDatum &d)
+void music_message_out_proxy::set_status(const DictionaryDatum &d)
 {
   Parameters_ ptmp = P_;  // temporary copy in case of errors
   ptmp.set(d, S_);        // throws if BadProperty
@@ -206,15 +176,54 @@ void music_message_in_proxy::set_status(const DictionaryDatum &d)
   State_ stmp = S_;
   stmp.set(d, P_);        // throws if BadProperty
 
-  long_t nm = 0;
-  if ( updateValue<long_t>(d, "n_messages", nm) )
-  {
-    if ( nm == 0 )
-      B_.message_handler_.clear();
-    else
-      throw BadProperty("n_messaged can only be set to 0.");
-  }
+  bool has_messages = d->known ("messages");
+  bool has_message_times = d->known ("message_times");
+  if (has_messages || has_message_times)
+    {
+      MUSIC::Runtime* r = nest::Communicator::get_music_runtime();
+      if (!r)
+	throw MUSICOnlyRuntime (get_name (), "emit messages");
 
+      if (!(has_messages && has_message_times))
+	throw BadProperty ("must have both messages and message_times");
+      
+      ArrayDatum messages = getValue<ArrayDatum>((*d)["messages"]);
+      ArrayDatum message_times = getValue<ArrayDatum>((*d)["message_times"]);
+
+      unsigned int n = messages.size ();
+      if (n != message_times.size ())
+	throw BadProperty ("messages and message_times must be of the same length");
+
+      for (unsigned int i = 0; i < n; ++i)
+	{
+	  StringDatum* sd = dynamic_cast<StringDatum*> (messages.get (i).datum ());
+	  if (sd == 0)
+	    {
+	      std::string msg = String::compose("not a string in messages[%1]", i);
+	      throw BadProperty (msg);
+	    }
+	  IntegerDatum* id = dynamic_cast<IntegerDatum*> (message_times.get (i).datum ());
+	  DoubleDatum* dd = dynamic_cast<DoubleDatum*> (message_times.get (i).datum ());
+	  double t;
+	  if (id == 0)
+	    {
+	      if (dd == 0)
+		{
+		  std::string msg = String::compose("not a number in message_times[%1]", i);
+		  throw BadProperty (msg);
+		}
+	      else
+		t = *dd;
+	    }
+	  else
+	    t = *id;
+	  
+	  V_.MP_->insertMessage (t,
+				 const_cast<void*> (static_cast<const void*> (sd->c_str ())),
+				 sd->size ());
+	}
+    }
+  
   // if we get here, temporaries contain consistent set of properties
   P_ = ptmp;
   S_ = stmp;
@@ -224,4 +233,4 @@ void music_message_in_proxy::set_status(const DictionaryDatum &d)
 
 #endif
 
-#endif /* #ifndef MUSIC_MESSAGE_IN_PROXY_H */
+#endif /* #ifndef MUSIC_MESSAGE_OUT_PROXY_H */

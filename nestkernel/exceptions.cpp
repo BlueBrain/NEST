@@ -297,6 +297,13 @@ std::string nest::MUSICSimulationHasRun::message()
   return msg.str();
 }
 
+std::string nest::MUSICOnlyRuntime::message()
+{
+  std::ostringstream msg;
+  msg << "The instance of model " << model_ << " can only " << action_ << "during the MUSIC runtime phase";
+  return msg.str();
+}
+
 std::string nest::MUSICChannelUnknown::message()
 {
   std::ostringstream msg;

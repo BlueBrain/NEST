@@ -1,0 +1,8 @@
+stoptime=1.0
+np=1
+[from]
+  binary=./msgout.py
+[to]
+  binary=./msgin.py
+
+from.out -> to.in [0]
