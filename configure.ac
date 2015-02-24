@@ -48,7 +48,7 @@ AC_CONFIG_AUX_DIR(.)
 # We might consider switching to tar-pax (2001) in the future, for now
 # tar-ustar (1988) is probably good enough. tar-v7 is not an option, since
 # we already hit the 99 char filename limit.
-AM_INIT_AUTOMAKE([tar-ustar subdir-objects])
+AM_INIT_AUTOMAKE([tar-ustar])
 
 # Allow to build NEST using silent rules.
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES])
